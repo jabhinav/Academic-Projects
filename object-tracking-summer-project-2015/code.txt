@@ -1,0 +1,67 @@
+
+videoFileReader = vision.VideoFileReader('v4.mp4');
+videoPlayer = vision.VideoPlayer('Position', [100, 100, 680, 520]);
+
+objectFrame = step(videoFileReader);
+figure; imshow(objectFrame); objectRegion=round(getPosition(imrect));
+
+objectImage = insertShape(objectFrame, 'Rectangle', objectRegion,'Color', 'yellow');
+figure; imshow(objectImage); title('Yellow box shows object region');
+
+points = detectMinEigenFeatures(rgb2gray(objectFrame), 'ROI', objectRegion);
+
+pointImage = insertMarker(objectFrame, points.Location, '+', 'Color', 'white');
+figure, imshow(pointImage), title('Detected interest points');
+
+tracker = vision.PointTracker('MaxBidirectionalError', 1);
+
+initialize(tracker, points.Location, objectFrame);
+
+bboxPoints = bbox2points(objectRegion(1, :));
+
+points=points.Location;
+oldPoints = points;
+
+while ~isDone(videoFileReader)
+    
+    videoFrame = step(videoFileReader);
+
+    
+    [points, isFound] = step(tracker, videoFrame);
+    visiblePoints = points(isFound, :);
+    oldInliers = oldPoints(isFound, :);
+
+    if size(visiblePoints, 1) >= 2 % need at least 2 points
+
+        
+        [xform, oldInliers, visiblePoints] = estimateGeometricTransform(...
+            oldInliers, visiblePoints, 'similarity', 'MaxDistance', 4);
+
+        
+        bboxPoints = transformPointsForward(xform, bboxPoints);
+
+        
+        bboxPolygon = reshape(bboxPoints', 1, []);
+        videoFrame = insertShape(videoFrame, 'Polygon', bboxPolygon, ...
+            'LineWidth', 2);
+
+        
+        videoFrame = insertMarker(videoFrame, visiblePoints, '+', ...
+            'Color', 'white');
+
+       
+        oldPoints = visiblePoints;
+        setPoints(tracker, oldPoints);
+    end
+
+    
+    step(videoPlayer, videoFrame);
+end
+
+
+release(videoFileReader);
+release(videoPlayer);
+release(tracker);
+
+
+
